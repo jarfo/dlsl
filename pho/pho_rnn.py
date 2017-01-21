@@ -14,83 +14,73 @@ Theoretically it introduces shorter term dependencies between source and target.
 
 from __future__ import print_function
 from keras.models import Sequential
-from keras.engine.training import slice_X
-from keras.layers import Activation, TimeDistributed, Dense, RepeatVector, recurrent
+from keras.layers import Activation, TimeDistributed, Dense, RepeatVector, recurrent, Embedding, Reshape
 import numpy as np
 from six.moves import range
 
 def levenshtein(s, t):
-    """ 
+    """
         levenshtein(s, t) -> ldist
-        ldist is the Levenshtein distance between the strings 
+        ldist is the Levenshtein distance between the strings
         s and t.
-        For all i and j, dist[i,j] will contain the Levenshtein 
-        distance between the first i characters of s and the 
+        For all i and j, dist[i,j] will contain the Levenshtein
+        distance between the first i characters of s and the
         first j characters of t
     """
     rows = len(s)+1
     cols = len(t)+1
-    dist = [[0 for x in range(cols)] for x in range(rows)]
-    # source prefixes can be transformed into empty strings 
+    dist = np.zeros((rows, cols), dtype=np.int)
+    # source prefixes can be transformed into empty strings
     # by deletions:
     for i in range(1, rows):
-        dist[i][0] = i
+        dist[i,0] = i
     # target prefixes can be created from an empty source string
     # by inserting the characters
     for i in range(1, cols):
-        dist[0][i] = i
-        
+        dist[0,i] = i
+
+    row = rows - 1
+    col = cols - 1
     for col in range(1, cols):
         for row in range(1, rows):
             if s[row-1] == t[col-1]:
                 cost = 0
             else:
                 cost = 1
-            dist[row][col] = min(dist[row-1][col] + 1,      # deletion
-                                 dist[row][col-1] + 1,      # insertion
-                                 dist[row-1][col-1] + cost) # substitution
- 
-    return dist[row][col]
+            dist[row, col] = min(dist[row-1, col] + 1,      # deletion
+                                 dist[row, col-1] + 1,      # insertion
+                                 dist[row-1, col-1] + cost) # substitution
+
+    return dist[row, col]
 
 
 class Dictionary(dict):
     def __init__(self, filename):
-        with open(filename, 'rt') as file:
-            for line in file:
+        with open(filename, 'rt') as f:
+            for line in f:
                 word, phones = line.split('\t')[:2]
                 self.update({word: phones})
         super(Dictionary, self).__init__()
 
 
 class CharacterTable(object):
-    '''
-    Given a set of characters:
-    + Encode them to a one hot integer representation
-    + Decode the one hot integer representation to their character output
-    + Decode a vector of probabilities to their character output
-    '''
-
     def __init__(self, chars, maxlen):
         self.chars = [''] + sorted(set(chars))
-        self.char_indices = dict((c, i) for i, c in enumerate(self.chars))
-        self.indices_char = dict((i, c) for i, c in enumerate(self.chars))
+        self.indices = dict((c, i) for i, c in enumerate(self.chars))
         self.maxlen = maxlen
         self.size = len(self.chars)
 
     def encode(self, C, maxlen=None):
         maxlen = maxlen if maxlen else self.maxlen
-        X = np.zeros((maxlen, len(self.chars)))
-        for i in range(maxlen):
-            if i < len(C):
-                X[i, self.char_indices[C[i]]] = 1
-            else:
-                X[i, 0] = 1
+        X = np.zeros(maxlen, dtype='int32')
+        for i, c in enumerate(C):
+            X[i] = self.indices[c]
         return X
 
-    def decode(self, X, calc_argmax=True, ch=''):
+    def decode(self, X, calc_argmax=False, ch=''):
         if calc_argmax:
             X = X.argmax(axis=-1)
-        return ch.join(self.indices_char[x] for x in X)
+        return ch.join(self.chars[x] for x in X)
 
 
 class colors:
@@ -104,9 +94,11 @@ TEST='wcmudict.test.dict'
 
 # Try replacing GRU, or SimpleRNN
 RNN = recurrent.LSTM
+VSIZE = 5
 HIDDEN_SIZE = 128
 BATCH_SIZE = 128
 LAYERS = 1
+INVERT = True
 
 train = Dictionary(TRAIN)
 test = Dictionary(TEST)
@@ -125,12 +117,14 @@ print('Total training words:', len(words))
 
 print('Vectorization...')
 def vectorization(words, trans):
-    X = np.zeros((len(words), words_maxlen, ctable.size), dtype=np.bool)
-    y = np.zeros((len(trans), trans_maxlen, ptable.size), dtype=np.bool)
+    X = np.zeros((len(words), words_maxlen, 1), dtype='int32')
+    y = np.zeros((len(trans), trans_maxlen, 1), dtype='int32')
     for i, word in enumerate(words):
-        X[i] = ctable.encode(word)
+        X[i,:,0] = ctable.encode(word)
     for i, tran in enumerate(trans):
-        y[i] = ptable.encode(tran)
+        y[i,:,0] = ptable.encode(tran)
+    if INVERT:
+        X = X[:,::-1,:]
     return X, y
 
 X_train, y_train = vectorization(words, trans)
@@ -151,9 +145,9 @@ print(y_train.shape)
 print('Build model...')
 model = Sequential()
 # "Encode" the input sequence using an RNN, producing an output of HIDDEN_SIZE
-# note: in a situation where your input sequences have a variable length,
-# use input_shape=(None, nb_feature).
-model.add(RNN(HIDDEN_SIZE, input_shape=(words_maxlen, ctable.size)))
+model.add(TimeDistributed(Embedding(ctable.size, VSIZE), input_shape=(words_maxlen,1), input_dtype='int32'))
+model.add(Reshape((words_maxlen, VSIZE)))
+model.add(RNN(HIDDEN_SIZE))
 # For the decoder's input, we repeat the encoded input for each time step
 model.add(RepeatVector(trans_maxlen))
 # The decoder RNN could be multiple layers stacked or a single layer
@@ -164,7 +158,7 @@ for _ in range(LAYERS):
 model.add(TimeDistributed(Dense(ptable.size)))
 model.add(Activation('softmax'))
 
-model.compile(loss='categorical_crossentropy',
+model.compile(loss='sparse_categorical_crossentropy',
               optimizer='adam',
               metrics=['accuracy'])
 
@@ -183,18 +177,18 @@ for iteration in range(1, 200):
     model.fit(X_train, y_train, batch_size=BATCH_SIZE, nb_epoch=1,
               validation_data=(X_val, y_val))
     preds = model.predict_classes(X_val, verbose=0)
-    save(y_val, preds, 'rnn.pred')
+    save(y_val, preds, 'rnn_{}.pred'.format(iteration))
 
     ###
     # Select 10 samples from the validation set at random so we can visualize errors
     for i in range(10):
         ind = np.random.randint(0, len(X_val))
-        rowX, rowy = X_val[np.array([ind])], y_val[np.array([ind])]
+        rowX, rowy = X_val[ind], y_val[ind]
         pred = preds[ind]
-        q = ctable.decode(rowX[0])
-        correct = ptable.decode(rowy[0], ch=' ').strip()
-        guess = ptable.decode(pred, calc_argmax=False, ch=' ').strip()
-        print('W:', q)
+        q = ctable.decode(rowX[:,0])
+        correct = ptable.decode(rowy[:,0], ch=' ').strip()
+        guess = ptable.decode(pred, ch=' ').strip()
+        print('W:', q[::-1] if INVERT else q)
         print('T:', correct)
         print(colors.ok + '☑' + colors.close if correct == guess else colors.fail + '☒' + colors.close, 
               guess, '(' + str(levenshtein(correct.split(), guess.split())) + ')')
