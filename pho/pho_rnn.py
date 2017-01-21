@@ -13,6 +13,7 @@ Theoretically it introduces shorter term dependencies between source and target.
 '''
 
 from __future__ import print_function
+from keras.utils.visualize_util import plot
 from keras.models import Sequential
 from keras.layers import Activation, TimeDistributed, Dense, RepeatVector, recurrent, Embedding, Reshape
 import numpy as np
@@ -117,14 +118,14 @@ print('Total training words:', len(words))
 
 print('Vectorization...')
 def vectorization(words, trans):
-    X = np.zeros((len(words), words_maxlen, 1), dtype='int32')
-    y = np.zeros((len(trans), trans_maxlen, 1), dtype='int32')
+    X = np.zeros((len(words), words_maxlen), dtype='int32')
+    y = np.zeros((len(trans), trans_maxlen), dtype='int32')
     for i, word in enumerate(words):
-        X[i,:,0] = ctable.encode(word)
+        X[i,:] = ctable.encode(word)
     for i, tran in enumerate(trans):
-        y[i,:,0] = ptable.encode(tran)
+        y[i,:] = ptable.encode(tran)
     if INVERT:
-        X = X[:,::-1,:]
+        X = X[:,::-1]
     return X, y
 
 X_train, y_train = vectorization(words, trans)
@@ -145,8 +146,7 @@ print(y_train.shape)
 print('Build model...')
 model = Sequential()
 # "Encode" the input sequence using an RNN, producing an output of HIDDEN_SIZE
-model.add(TimeDistributed(Embedding(ctable.size, VSIZE), input_shape=(words_maxlen,1), input_dtype='int32'))
-model.add(Reshape((words_maxlen, VSIZE)))
+model.add(Embedding(ctable.size, VSIZE, input_dtype='int32'))
 model.add(RNN(HIDDEN_SIZE))
 # For the decoder's input, we repeat the encoded input for each time step
 model.add(RepeatVector(trans_maxlen))
@@ -157,6 +157,8 @@ for _ in range(LAYERS):
 # For each of step of the output sequence, decide which phone should be chosen
 model.add(TimeDistributed(Dense(ptable.size)))
 model.add(Activation('softmax'))
+model.summary()
+plot(model, show_shapes=True, to_file='pho_rnn.png', show_layer_names=False)
 
 model.compile(loss='sparse_categorical_crossentropy',
               optimizer='adam',
@@ -170,12 +172,12 @@ def save(refs, preds, filename):
             print(correct, '|', guess, file=res)
 
 # Train the model each generation and show predictions against the validation dataset
-for iteration in range(1, 200):
+for iteration in range(1, 120):
     print()
     print('-' * 50)
     print('Iteration', iteration)
-    model.fit(X_train, y_train, batch_size=BATCH_SIZE, nb_epoch=1,
-              validation_data=(X_val, y_val))
+    model.fit(X_train, y_train[..., np.newaxis], batch_size=BATCH_SIZE, nb_epoch=1,
+              validation_data=(X_val, y_val[..., np.newaxis])) # add a new dim to y_train and y_val to match output
     preds = model.predict_classes(X_val, verbose=0)
     save(y_val, preds, 'rnn_{}.pred'.format(iteration))
 
@@ -185,8 +187,8 @@ for iteration in range(1, 200):
         ind = np.random.randint(0, len(X_val))
         rowX, rowy = X_val[ind], y_val[ind]
         pred = preds[ind]
-        q = ctable.decode(rowX[:,0])
-        correct = ptable.decode(rowy[:,0], ch=' ').strip()
+        q = ctable.decode(rowX)
+        correct = ptable.decode(rowy, ch=' ').strip()
         guess = ptable.decode(pred, ch=' ').strip()
         print('W:', q[::-1] if INVERT else q)
         print('T:', correct)
