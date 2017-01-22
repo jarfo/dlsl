@@ -95,7 +95,7 @@ TEST='wcmudict.test.dict'
 
 # Try replacing GRU, or SimpleRNN
 RNN = recurrent.LSTM
-VSIZE = 5
+VSIZE = 7
 HIDDEN_SIZE = 128
 BATCH_SIZE = 128
 LAYERS = 1
