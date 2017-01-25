@@ -6,4 +6,4 @@ mkdir glove.6B
 cd glove.6B
 tar -xvf ../glove.6B.zip
 cd ..
-tar -xvf news20.tar.gz
+tar -xvf 20news-bydate.tar.gz
