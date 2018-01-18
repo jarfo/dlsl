@@ -13,7 +13,7 @@ Theoretically it introduces shorter term dependencies between source and target.
 '''
 
 from __future__ import print_function
-from keras.utils.visualize_util import plot
+from keras.utils.vis_utils import plot_model
 from keras.models import Sequential
 from keras.layers import Activation, TimeDistributed, Dense, RepeatVector, recurrent, Embedding, Reshape
 import numpy as np
@@ -104,8 +104,8 @@ INVERT = True
 train = Dictionary(TRAIN)
 test = Dictionary(TEST)
 
-words = map(str.split, train.keys())    # [['u', 's', 'e', 'd'], ['m', 'o', 'u', 'n', 't'], ...]
-trans = map(str.split, train.values())
+words = [w.split() for w in train.keys()]    # [['u', 's', 'e', 'd'], ['m', 'o', 'u', 'n', 't'], ...]
+trans = [w.split() for w in train.values()]
 words_maxlen = max(map(len, words))
 trans_maxlen = max(map(len, trans))
 
@@ -130,8 +130,8 @@ def vectorization(words, trans):
 
 X_train, y_train = vectorization(words, trans)
 
-words_test = map(str.split, test.keys())
-trans_test = map(str.split, test.values())
+words_test = [w.split() for w in test.keys()]
+trans_test = [w.split() for w in test.values()]
 X_val, y_val = vectorization(words_test, trans_test)
 
 # Shuffle (X_train, y_train) in unison
@@ -146,7 +146,7 @@ print(y_train.shape)
 print('Build model...')
 model = Sequential()
 # "Encode" the input sequence using an RNN, producing an output of HIDDEN_SIZE
-model.add(Embedding(ctable.size, VSIZE, input_dtype='int32'))
+model.add(Embedding(ctable.size, VSIZE))
 model.add(RNN(HIDDEN_SIZE))
 # For the decoder's input, we repeat the encoded input for each time step
 model.add(RepeatVector(trans_maxlen))
@@ -158,7 +158,7 @@ for _ in range(LAYERS):
 model.add(TimeDistributed(Dense(ptable.size)))
 model.add(Activation('softmax'))
 model.summary()
-plot(model, show_shapes=True, to_file='pho_rnn.png', show_layer_names=False)
+plot_model(model, show_shapes=True, to_file='pho_rnn.png', show_layer_names=False)
 
 model.compile(loss='sparse_categorical_crossentropy',
               optimizer='adam',
@@ -176,7 +176,7 @@ for iteration in range(1, 120):
     print()
     print('-' * 50)
     print('Iteration', iteration)
-    model.fit(X_train, y_train[..., np.newaxis], batch_size=BATCH_SIZE, nb_epoch=1,
+    model.fit(X_train, y_train[..., np.newaxis], batch_size=BATCH_SIZE, epochs=1,
               validation_data=(X_val, y_val[..., np.newaxis])) # add a new dim to y_train and y_val to match output
     preds = model.predict_classes(X_val, verbose=0)
     save(y_val, preds, 'rnn_{}.pred'.format(iteration))

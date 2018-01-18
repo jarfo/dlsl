@@ -4,6 +4,6 @@ wget http://nlp.stanford.edu/data/glove.6B.zip
 wget http://qwone.com/~jason/20Newsgroups/20news-bydate.tar.gz
 mkdir glove.6B
 cd glove.6B
-tar -xvf ../glove.6B.zip
+unzip ../glove.6B.zip
 cd ..
 tar -xvf 20news-bydate.tar.gz

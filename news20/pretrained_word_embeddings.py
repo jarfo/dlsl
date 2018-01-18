@@ -22,7 +22,7 @@ from keras.utils.np_utils import to_categorical
 from keras.layers import Dense, Input, Flatten
 from keras.layers import Conv1D, MaxPooling1D, Embedding
 from keras.models import Model
-from keras.utils.visualize_util import plot
+from keras.utils.vis_utils import plot_model
 import sys
 
 BASE_DIR = '.'
@@ -123,7 +123,7 @@ x = Dense(128, activation='relu')(x)
 preds = Dense(len(labels_index), activation='softmax')(x)
 
 model = Model(sequence_input, preds)
-plot(model, show_shapes=True, to_file='news20.png', show_layer_names=False)
+plot_model(model, show_shapes=True, to_file='news20.png', show_layer_names=False)
 model.compile(loss='sparse_categorical_crossentropy',
               optimizer='rmsprop',
               metrics=['acc'])
@@ -131,4 +131,4 @@ model.compile(loss='sparse_categorical_crossentropy',
 # happy learning!
 model.fit(X_train, y_train[..., np.newaxis],
           validation_data=(X_val, y_val[..., np.newaxis]),
-          nb_epoch=20, batch_size=128)
+          epochs=20, batch_size=128)
