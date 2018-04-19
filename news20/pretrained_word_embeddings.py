@@ -13,6 +13,7 @@ http://qwone.com/~jason/20Newsgroups/
 
 from __future__ import print_function
 import os
+import codecs
 import numpy as np
 np.random.seed(1337)
 
@@ -35,7 +36,7 @@ EMBEDDING_DIM = 100
 
 def read_glove_vectors(filename):
     embeddings_index = {}
-    f = open(filename)
+    f = codecs.open(filename, encoding="utf-8")
     coefs = None
     for i, line in enumerate(f):
         values = line.split()
@@ -123,6 +124,8 @@ x = Dense(128, activation='relu')(x)
 preds = Dense(len(labels_index), activation='softmax')(x)
 
 model = Model(sequence_input, preds)
+model.summary()
+
 plot_model(model, show_shapes=True, to_file='news20.png', show_layer_names=False)
 model.compile(loss='sparse_categorical_crossentropy',
               optimizer='rmsprop',

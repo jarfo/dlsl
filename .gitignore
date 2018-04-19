@@ -2,4 +2,4 @@
 .settings
 .pydevproject
 *.png
-
+logs
